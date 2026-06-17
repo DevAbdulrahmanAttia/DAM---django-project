@@ -1,16 +1,35 @@
 from rest_framework import serializers
+
 from apps.products.models import Product
+
 from .models import Cart, CartItem
 
 
+class CartProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product
+        fields = ('id', 'name', 'slug', 'price', 'stock', 'is_active')
+
+
 class CartItemSerializer(serializers.ModelSerializer):
+    product = CartProductSerializer(read_only=True)
     subtotal = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     quantity = serializers.IntegerField(min_value=1)
 
     class Meta:
         model = CartItem
-        fields = ['id', 'product', 'quantity', 'unit_price', 'subtotal']
-        read_only_fields = ['id', 'unit_price', 'subtotal']
+        fields = ('id', 'product', 'quantity', 'unit_price', 'subtotal')
+        read_only_fields = ('id', 'unit_price', 'subtotal')
+
+    def validate_quantity(self, value):
+        product = self.instance.product
+        if not product.is_active:
+            raise serializers.ValidationError('Product is no longer active.')
+        if value > product.stock:
+            raise serializers.ValidationError(
+                f'Only {product.stock} items available in stock.'
+            )
+        return value
 
     def update(self, instance, validated_data):
         instance.quantity = validated_data.get('quantity', instance.quantity)
@@ -22,14 +41,25 @@ class CartItemSerializer(serializers.ModelSerializer):
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
     total_price = serializers.SerializerMethodField()
+    item_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Cart
-        fields = ['id', 'user', 'items', 'total_price', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'user', 'created_at', 'updated_at']
+        fields = (
+            'id',
+            'items',
+            'item_count',
+            'total_price',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = fields
 
     def get_total_price(self, obj):
         return sum(item.subtotal for item in obj.items.all())
+
+    def get_item_count(self, obj):
+        return sum(item.quantity for item in obj.items.all())
 
 
 class AddToCartSerializer(serializers.Serializer):
@@ -38,22 +68,44 @@ class AddToCartSerializer(serializers.Serializer):
 
     def validate_product_id(self, value):
         try:
-            product = Product.objects.get(id=value)
+            self.product = Product.objects.get(id=value)
         except Product.DoesNotExist:
-            raise serializers.ValidationError("Product does not exist.")
-        if not product.is_active:
-            raise serializers.ValidationError("Product is not active.")
+            raise serializers.ValidationError('Product does not exist.')
+        if not self.product.is_active:
+            raise serializers.ValidationError('Product is not active.')
         return value
 
+    def validate(self, attrs):
+        product = self.product
+        cart = self.context.get('cart')
+        existing_qty = 0
+
+        if cart is not None:
+            existing_item = CartItem.objects.filter(cart=cart, product=product).first()
+            if existing_item:
+                existing_qty = existing_item.quantity
+
+        total_qty = existing_qty + attrs['quantity']
+        if total_qty > product.stock:
+            available = product.stock - existing_qty
+            if available <= 0:
+                raise serializers.ValidationError(
+                    {'quantity': 'Maximum available quantity is already in your cart.'}
+                )
+            raise serializers.ValidationError(
+                {'quantity': f'Only {available} more item(s) can be added.'}
+            )
+        return attrs
+
     def save(self, **kwargs):
-        cart = kwargs.get('cart')
-        product_id = self.validated_data['product_id']
+        cart = kwargs['cart']
+        product = self.product
         quantity = self.validated_data['quantity']
-        product = Product.objects.get(id=product_id)
+
         cart_item, created = CartItem.objects.get_or_create(
             cart=cart,
             product=product,
-            defaults={'quantity': quantity, 'unit_price': product.price}
+            defaults={'quantity': quantity, 'unit_price': product.price},
         )
         if not created:
             cart_item.quantity += quantity
