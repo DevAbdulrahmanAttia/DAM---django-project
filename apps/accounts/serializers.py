@@ -2,8 +2,15 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
+from rest_framework_simplejwt.serializers import (
+    TokenObtainPairSerializer,
+    TokenObtainSerializer,
+)
 
 from .models import UserProfile
+from .utils import send_verification_email
 
 User = get_user_model()
 
@@ -46,7 +53,43 @@ class RegisterSerializer(serializers.ModelSerializer):
 
             UserProfile.objects.create(user=user)
 
+            # Send verification email after transaction commits (if request is available).
+            request = self.context.get('request')
+            if request is not None:
+                transaction.on_commit(lambda: send_verification_email(user, request))
+
         return user
+
+
+    def validate_password(self, value):
+        """Validate password using Django's validators and return it.
+
+        This ensures minimum length and non-numeric constraints defined
+        in `AUTH_PASSWORD_VALIDATORS` are enforced and returned as
+        serializer validation errors.
+        """
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages))
+        return value
+
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """Custom token serializer that blocks login for unverified users."""
+
+    def validate(self, attrs):
+        # Authenticate user first without generating tokens.
+        TokenObtainSerializer.validate(self, attrs)
+
+        # If the user hasn't verified email, deny login.
+        if not getattr(self.user, 'is_verified', False):
+            raise serializers.ValidationError(
+                {'detail': 'Please verify your email before logging in.'}
+            )
+
+        # Now call parent to generate JWT tokens.
+        return super().validate(attrs)
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -68,3 +111,14 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "city",
             "country",
         )
+
+
+class UpdateProfileSerializer(serializers.ModelSerializer):
+    """Serializer for updating only the UserProfile fields."""
+
+    class Meta:
+        model = UserProfile
+        fields = ("full_name", "address", "city", "country", "profile_image")
+        extra_kwargs = {
+            "profile_image": {"required": False, "allow_null": True},
+        }
