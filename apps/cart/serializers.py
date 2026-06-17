@@ -6,9 +6,20 @@ from .models import Cart, CartItem
 
 
 class CartProductSerializer(serializers.ModelSerializer):
+    primary_image = serializers.SerializerMethodField()
+
     class Meta:
         model = Product
-        fields = ('id', 'name', 'slug', 'price', 'stock', 'is_active')
+        fields = ('id', 'name', 'slug', 'price', 'stock', 'is_active', 'primary_image')
+
+    def get_primary_image(self, obj):
+        primary = obj.images.filter(is_primary=True).first()
+        if primary:
+            return primary.image.url
+        first_image = obj.images.first()
+        if first_image:
+            return first_image.image.url
+        return None
 
 
 class CartItemSerializer(serializers.ModelSerializer):
@@ -42,11 +53,15 @@ class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
     total_price = serializers.SerializerMethodField()
     item_count = serializers.SerializerMethodField()
+    user_username = serializers.CharField(source='user.username', read_only=True)
+    user_email = serializers.CharField(source='user.email', read_only=True)
 
     class Meta:
         model = Cart
         fields = (
             'id',
+            'user_username',
+            'user_email',
             'items',
             'item_count',
             'total_price',
