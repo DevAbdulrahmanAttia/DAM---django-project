@@ -1,14 +1,35 @@
+from django.utils.text import slugify
 from rest_framework import serializers
 
 from .models import Category, Product, ProductImage, Review
 
 
 class CategorySerializer(serializers.ModelSerializer):
-    """Serializer for the Category model."""
+    product_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Category
-        fields = ('id', 'name', 'slug', 'description')
+        fields = ('id', 'name', 'slug', 'description', 'image', 'is_active', 'product_count')
+        read_only_fields = ('id', 'product_count')
+
+    def get_product_count(self, obj):
+        return obj.products.filter(is_active=True).count()
+
+    def create(self, validated_data):
+        if not validated_data.get('slug'):
+            base_slug = slugify(validated_data['name'])
+            slug = base_slug
+            counter = 1
+            while Category.objects.filter(slug=slug).exists():
+                slug = f'{base_slug}-{counter}'
+                counter += 1
+            validated_data['slug'] = slug
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        if 'name' in validated_data and not validated_data.get('slug'):
+            validated_data.pop('slug', None)
+        return super().update(instance, validated_data)
 
 
 class ProductImageSerializer(serializers.ModelSerializer):

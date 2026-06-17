@@ -4,6 +4,8 @@ from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 
+from config.permissions import IsAdminOrReadOnly
+
 from .models import Category, Product, ProductImage, Review
 from .serializers import (
     CategorySerializer,
@@ -62,32 +64,23 @@ class IsImageOwnerOrReadOnly(permissions.BasePermission):
 class CategoryListCreateView(generics.ListCreateAPIView):
     """
     GET  — List all categories (anyone).
-    POST — Create a new category (authenticated users).
+    POST — Create a new category (admin only).
     """
 
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
-
-    def get_permissions(self):
-        if self.request.method == 'GET':
-            return [permissions.AllowAny()]
-        return [permissions.IsAuthenticated()]
+    permission_classes = [IsAdminOrReadOnly]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['is_active']
+    search_fields = ['name', 'description']
+    ordering_fields = ['name', 'id']
+    ordering = ['name']
 
 
 class CategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """
-    GET    — View a category (anyone).
-    PUT    — Update a category (authenticated).
-    DELETE — Delete a category (authenticated).
-    """
-
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
-
-    def get_permissions(self):
-        if self.request.method == 'GET':
-            return [permissions.AllowAny()]
-        return [permissions.IsAuthenticated()]
+    permission_classes = [IsAdminOrReadOnly]
 
 
 # ─── Product Views (with Search & Filtering) ─────────────────────────────────
@@ -102,7 +95,9 @@ class ProductListCreateView(generics.ListCreateAPIView):
     Ordering: ?ordering=price  or  ?ordering=-created_at
     """
 
-    queryset = Product.objects.select_related('category', 'seller').all()
+    queryset = Product.objects.select_related('category', 'seller').filter(
+        seller__is_approved=True,
+    )
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
 
     # Filtering fields
@@ -123,8 +118,20 @@ class ProductListCreateView(generics.ListCreateAPIView):
         return [permissions.IsAuthenticated()]
 
     def perform_create(self, serializer):
-        # Auto-set seller to the logged-in user's seller profile
-        serializer.save(seller=self.request.user.seller_profile)
+        user = self.request.user
+        if getattr(user, 'role', None) == 'admin':
+            seller_id = self.request.data.get('seller')
+            if seller_id:
+                from apps.vendors.models import Seller
+                seller = Seller.objects.get(pk=seller_id)
+            else:
+                seller = Seller.objects.filter(is_approved=True).first()
+                if not seller:
+                    from rest_framework.exceptions import ValidationError
+                    raise ValidationError({'seller': 'No approved seller available. Create a seller first.'})
+        else:
+            seller = user.seller_profile
+        serializer.save(seller=seller)
 
 
 class ProductDetailView(generics.RetrieveUpdateDestroyAPIView):

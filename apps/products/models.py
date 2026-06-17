@@ -8,6 +8,8 @@ class Category(models.Model):
     name = models.CharField(_('name'), max_length=255, db_index=True)
     slug = models.SlugField(_('slug'), max_length=255, unique=True, db_index=True)
     description = models.TextField(_('description'), blank=True)
+    image = models.ImageField(_('image'), upload_to='categories/%Y/%m/', blank=True, null=True)
+    is_active = models.BooleanField(_('active'), default=True, db_index=True)
 
     class Meta:
         verbose_name = _('category')

@@ -1,43 +1,53 @@
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter, OrderingFilter
+
+from config.permissions import IsAdmin
 
 from .models import Seller
 from .serializers import SellerSerializer
 
 
 class VendorsHealthCheckView(APIView):
-    """Placeholder view to verify the vendors API namespace."""
-
     permission_classes = []
     authentication_classes = []
 
     def get(self, request):
-        return Response(
-            {'detail': 'vendors API is ready'},
-            status=status.HTTP_200_OK,
-        )
+        return Response({'detail': 'vendors API is ready'}, status=status.HTTP_200_OK)
 
 
-class IsOwnerOrReadOnly(permissions.BasePermission):
-    """Allow read access to anyone, write access only to the seller owner."""
-
+class IsOwnerOrAdminOrReadOnly(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
-        # Read permissions (GET, HEAD, OPTIONS) are allowed for any request
         if request.method in permissions.SAFE_METHODS:
             return True
-        # Write permissions only for the owner
+        if getattr(request.user, 'role', None) == 'admin':
+            return True
         return obj.user == request.user
 
 
 class SellerListCreateView(generics.ListCreateAPIView):
     """
-    GET  — List all approved sellers (anyone can view).
+    GET  — List sellers (approved only for public; all for admin).
     POST — Create a seller profile (authenticated users only).
     """
 
-    queryset = Seller.objects.all()
     serializer_class = SellerSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['is_approved']
+    search_fields = ['store_name', 'description']
+    ordering_fields = ['store_name', 'created_at']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        qs = Seller.objects.select_related('user').all()
+        user = self.request.user
+        if user.is_authenticated and getattr(user, 'role', None) == 'admin':
+            return qs
+        if self.request.method == 'GET':
+            return qs.filter(is_approved=True)
+        return qs
 
     def get_permissions(self):
         if self.request.method == 'GET':
@@ -45,18 +55,15 @@ class SellerListCreateView(generics.ListCreateAPIView):
         return [permissions.IsAuthenticated()]
 
     def perform_create(self, serializer):
-        # Automatically set the user to the logged-in user
         serializer.save(user=self.request.user)
 
 
 class SellerDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """
-    GET    — View a single seller profile (anyone).
-    PUT    — Update seller profile (owner only).
-    PATCH  — Partial update seller profile (owner only).
-    DELETE — Delete seller profile (owner only).
-    """
-
-    queryset = Seller.objects.all()
+    queryset = Seller.objects.select_related('user').all()
     serializer_class = SellerSerializer
-    permission_classes = [IsOwnerOrReadOnly]
+    permission_classes = [IsOwnerOrAdminOrReadOnly]
+
+    def get_permissions(self):
+        if self.request.method == 'DELETE':
+            return [IsAdmin()]
+        return [IsOwnerOrAdminOrReadOnly()]

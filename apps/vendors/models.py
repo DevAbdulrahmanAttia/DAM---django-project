@@ -12,6 +12,7 @@ class Seller(models.Model):
     )
     store_name = models.CharField(_('store name'), max_length=255, db_index=True)
     description = models.TextField(_('description'), blank=True)
+    logo = models.ImageField(_('logo'), upload_to='sellers/%Y/%m/', blank=True, null=True)
     is_approved = models.BooleanField(
         _('approved'),
         default=False,
