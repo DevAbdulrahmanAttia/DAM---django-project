@@ -1,0 +1,492 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7a8b-9c0d-e1f2a3b4c5d6",
+    "name": "DAM Django Project API",
+    "description": "API collection for DAM Django Project.\n\nSetup:\n1. Import this collection into Postman.\n2. Set `base_url` (default: http://127.0.0.1:8000).\n3. Run `Login` under Auth > Session — tokens are saved automatically.\n\nSeeded users (after `python manage.py seed_users`):\n- admin / Dam@123456\n- customer / Dam@123456\n- seller / Dam@123456",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01. Auth",
+      "description": "Registration, login, logout, email verification, and password reset.",
+      "item": [
+        {
+          "name": "Registration",
+          "item": [
+            {
+              "name": "Register",
+              "request": {
+                "auth": { "type": "noauth" },
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"newuser\",\n  \"email\": \"newuser@example.com\",\n  \"phone\": \"+201234567890\",\n  \"role\": \"customer\",\n  \"password\": \"Dam@123456\"\n}"
+                },
+                "url": "{{base_url}}/api/v1/auth/register/",
+                "description": "Create a new account. A 6-digit verification OTP is sent by email."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Session",
+          "item": [
+            {
+              "name": "Login",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "    const data = pm.response.json();",
+                      "    pm.collectionVariables.set('token', data.access);",
+                      "    pm.collectionVariables.set('refresh_token', data.refresh);",
+                      "    console.log('Tokens saved to collection variables.');",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": { "type": "noauth" },
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"customer\",\n  \"password\": \"Dam@123456\"\n}"
+                },
+                "url": "{{base_url}}/api/v1/auth/login/",
+                "description": "Login and receive JWT access + refresh tokens. Requires verified email. Tokens are auto-saved."
+              },
+              "response": []
+            },
+            {
+              "name": "Refresh Token",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "    const data = pm.response.json();",
+                      "    pm.collectionVariables.set('token', data.access);",
+                      "    if (data.refresh) {",
+                      "        pm.collectionVariables.set('refresh_token', data.refresh);",
+                      "    }",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": { "type": "noauth" },
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"refresh\": \"{{refresh_token}}\"\n}"
+                },
+                "url": "{{base_url}}/api/v1/auth/refresh/",
+                "description": "Get a new access token using the refresh token."
+              },
+              "response": []
+            },
+            {
+              "name": "Logout",
+              "request": {
+                "auth": { "type": "noauth" },
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"refresh\": \"{{refresh_token}}\"\n}"
+                },
+                "url": "{{base_url}}/api/v1/auth/logout/",
+                "description": "Blacklist the refresh token to end the session."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Email Verification",
+          "item": [
+            {
+              "name": "Verify Email",
+              "request": {
+                "auth": { "type": "noauth" },
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"newuser@example.com\",\n  \"otp\": \"123456\"\n}"
+                },
+                "url": "{{base_url}}/api/v1/auth/verify-email/",
+                "description": "Verify account using the 6-digit OTP sent by email after register or resend-verification."
+              },
+              "response": []
+            },
+            {
+              "name": "Resend Verification",
+              "request": {
+                "auth": { "type": "noauth" },
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"newuser@example.com\"\n}"
+                },
+                "url": "{{base_url}}/api/v1/auth/resend-verification/",
+                "description": "Resend the verification OTP if the user did not receive it."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Password Reset",
+          "item": [
+            {
+              "name": "Forgot Password",
+              "request": {
+                "auth": { "type": "noauth" },
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"customer@dam.test\"\n}"
+                },
+                "url": "{{base_url}}/api/v1/auth/forgot-password/",
+                "description": "Send a 6-digit OTP to the user's email."
+              },
+              "response": []
+            },
+            {
+              "name": "Verify Reset OTP",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "    const data = pm.response.json();",
+                      "    if (data.reset_token) {",
+                      "        pm.collectionVariables.set('reset_token', data.reset_token);",
+                      "    }",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": { "type": "noauth" },
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"customer@dam.test\",\n  \"otp\": \"123456\"\n}"
+                },
+                "url": "{{base_url}}/api/v1/auth/verify-reset-otp/",
+                "description": "Verify the OTP from email. Saves reset_token automatically on success."
+              },
+              "response": []
+            },
+            {
+              "name": "Reset Password",
+              "request": {
+                "auth": { "type": "noauth" },
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"customer@dam.test\",\n  \"reset_token\": \"{{reset_token}}\",\n  \"password\": \"Dam@123456\"\n}"
+                },
+                "url": "{{base_url}}/api/v1/auth/reset-password/",
+                "description": "Set a new password after OTP verification."
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02. Accounts",
+      "description": "Authenticated user profile and health check.",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/accounts/health/",
+            "description": "Check if the accounts API is running."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/accounts/profile/",
+            "description": "Get the authenticated user's profile."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Updated Name\",\n  \"address\": \"456 Side Street\",\n  \"city\": \"Giza\",\n  \"country\": \"Egypt\"\n}"
+            },
+            "url": "{{base_url}}/api/v1/accounts/profile/",
+            "description": "Update profile fields (full_name, address, city, country, profile_image)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03. Cart",
+      "description": "Shopping cart operations. Login as customer first.",
+      "item": [
+        {
+          "name": "Get Cart",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/cart/",
+            "description": "Get the current user's cart with items, product details, and totals."
+          },
+          "response": []
+        },
+        {
+          "name": "Add to Cart",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": 1,\n  \"quantity\": 2\n}"
+            },
+            "url": "{{base_url}}/api/v1/cart/add/",
+            "description": "Add a product to the cart or increase quantity. Validates stock."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Cart Item",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 3\n}"
+            },
+            "url": "{{base_url}}/api/v1/cart/items/{{item_id}}/",
+            "description": "Update quantity for a cart item. Validates stock."
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Cart Item",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/v1/cart/items/{{item_id}}/",
+            "description": "Remove an item from the cart."
+          },
+          "response": []
+        },
+        {
+          "name": "Clear Cart",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/api/v1/cart/clear/",
+            "description": "Remove all items from the cart."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "04. Products",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/products/health/",
+            "description": "Check if the products API is running."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "05. Vendors",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/vendors/health/",
+            "description": "Check if the vendors API is running."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "06. Orders",
+      "description": "Checkout and order history. Login as customer first.",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/orders/health/",
+            "description": "Check if the orders API is running."
+          },
+          "response": []
+        },
+        {
+          "name": "Checkout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const data = pm.response.json();",
+                  "    pm.collectionVariables.set('order_id', data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shipping_cost\": 10.00\n}"
+            },
+            "url": "{{base_url}}/api/v1/orders/checkout/",
+            "description": "Create an order from the current cart. Decrements stock and clears the cart."
+          },
+          "response": []
+        },
+        {
+          "name": "List Orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/orders/",
+            "description": "List the authenticated user's orders (paginated)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Order Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/orders/{{order_id}}/",
+            "description": "Get a single order with line items."
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Order",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{base_url}}/api/v1/orders/{{order_id}}/cancel/",
+            "description": "Cancel an order and restore product stock (if not shipped)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "07. Payments",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/v1/payments/health/",
+            "description": "Check if the payments API is running."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:8000", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "refresh_token", "value": "", "type": "string" },
+    { "key": "reset_token", "value": "", "type": "string" },
+    { "key": "item_id", "value": "1", "type": "string" },
+    { "key": "order_id", "value": "1", "type": "string" }
+  ]
+}
