@@ -14,6 +14,8 @@ from .serializers import (
 from .models import UserProfile
 from .serializers import CustomTokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
+from .serializers import ForgotPasswordSerializer, ResetPasswordSerializer
+from .utils import send_password_reset_email
 
 User = get_user_model()
 
@@ -98,3 +100,35 @@ class VerifyEmailView(APIView):
             return Response({'detail': 'Email verified successfully.'}, status=status.HTTP_200_OK)
 
         return Response({'detail': 'Invalid or expired token.'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ForgotPasswordView(APIView):
+    """Accepts an email and sends a password reset link if the user exists."""
+
+    permission_classes = []
+    authentication_classes = []
+
+    def post(self, request):
+        serializer = ForgotPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # user existence validated by serializer
+        user = User.objects.get(email=serializer.validated_data['email'])
+
+        # send password reset email
+        send_password_reset_email(user, request)
+
+        return Response({'detail': 'Password reset email sent.'}, status=status.HTTP_200_OK)
+
+
+class ResetPasswordConfirmView(APIView):
+    """Accepts uidb64, token and new password to reset the user's password."""
+
+    permission_classes = []
+    authentication_classes = []
+
+    def post(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({'detail': 'Password has been reset.'}, status=status.HTTP_200_OK)

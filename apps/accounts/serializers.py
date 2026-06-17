@@ -8,6 +8,9 @@ from rest_framework_simplejwt.serializers import (
     TokenObtainPairSerializer,
     TokenObtainSerializer,
 )
+from django.utils.http import urlsafe_base64_decode
+from django.utils.encoding import force_str
+from django.contrib.auth.tokens import default_token_generator
 
 from .models import UserProfile
 from .utils import send_verification_email
@@ -122,3 +125,51 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "profile_image": {"required": False, "allow_null": True},
         }
+
+
+class ForgotPasswordSerializer(serializers.Serializer):
+    """Accepts an email and validates that a user exists."""
+
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        if not User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("User with this email does not exist.")
+        return value
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    """Validate uidb64 + token and reset the user's password."""
+
+    uidb64 = serializers.CharField()
+    token = serializers.CharField()
+    password = serializers.CharField(write_only=True)
+
+    def validate_password(self, value):
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages))
+        return value
+
+    def validate(self, attrs):
+        uidb64 = attrs.get('uidb64')
+        token = attrs.get('token')
+        try:
+            uid = force_str(urlsafe_base64_decode(uidb64))
+            user = User.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            raise serializers.ValidationError({'uidb64': 'Invalid uid.'})
+
+        if not default_token_generator.check_token(user, token):
+            raise serializers.ValidationError({'token': 'Invalid or expired token.'})
+
+        attrs['user'] = user
+        return attrs
+
+    def save(self, **kwargs):
+        password = self.validated_data['password']
+        user = self.validated_data['user']
+        user.set_password(password)
+        user.save()
+        return user
