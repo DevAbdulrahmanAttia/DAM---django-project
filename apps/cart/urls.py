@@ -1,9 +1,13 @@
-from django.urls import path
-
-from .views import CartHealthCheckView
+from django.urls import include, path
+from rest_framework.routers import DefaultRouter
+from .views import CartItemViewSet, CartViewSet
 
 app_name = 'cart'
 
+router = DefaultRouter()
+router.register(r'items', CartItemViewSet, basename='cart-item')
+router.register(r'', CartViewSet, basename='cart')
+
 urlpatterns = [
-    path('health/', CartHealthCheckView.as_view(), name='health'),
+    path('', include(router.urls)),
 ]

@@ -8,17 +8,9 @@ class Cart(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='carts',
+        unique=True,
+        related_name='cart',
         verbose_name=_('user'),
-        null=True,
-        blank=True,
-    )
-    session_key = models.CharField(
-        _('session key'),
-        max_length=40,
-        null=True,
-        blank=True,
-        db_index=True,
     )
     created_at = models.DateTimeField(_('created at'), auto_now_add=True)
     updated_at = models.DateTimeField(_('updated at'), auto_now=True)
@@ -27,21 +19,9 @@ class Cart(models.Model):
         verbose_name = _('cart')
         verbose_name_plural = _('carts')
         ordering = ['-updated_at']
-        constraints = [
-            models.CheckConstraint(
-                condition=models.Q(user__isnull=False) | models.Q(session_key__isnull=False),
-                name='cart_requires_user_or_session',
-            ),
-        ]
-        indexes = [
-            models.Index(fields=['user', '-updated_at']),
-            models.Index(fields=['session_key']),
-        ]
 
     def __str__(self):
-        if self.user:
-            return f'Cart for {self.user}'
-        return f'Guest cart ({self.session_key})'
+        return f'Cart for {self.user}'
 
 
 class CartItem(models.Model):
@@ -79,14 +59,10 @@ class CartItem(models.Model):
                 name='unique_product_per_cart',
             ),
         ]
-        indexes = [
-            models.Index(fields=['cart']),
-            models.Index(fields=['product']),
-        ]
 
     def __str__(self):
         return f'{self.quantity}x {self.product.name}'
 
     @property
     def subtotal(self):
-        return self.unit_price * self.quantity
+        return self.quantity * self.unit_price
