@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.db import transaction
+import logging
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 from django.contrib.auth.password_validation import validate_password
@@ -10,9 +11,10 @@ from rest_framework_simplejwt.serializers import (
 )
 
 from .models import UserProfile
-from .utils import send_verification_email
+from .utils import issue_email_verification_otp
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -53,10 +55,18 @@ class RegisterSerializer(serializers.ModelSerializer):
 
             UserProfile.objects.create(user=user)
 
-            # Send verification email after transaction commits (if request is available).
-            request = self.context.get('request')
-            if request is not None:
-                transaction.on_commit(lambda: send_verification_email(user, request))
+        try:
+            issue_email_verification_otp(user)
+        except Exception:
+            logger.exception('Verification email failed for %s', user.email)
+            raise serializers.ValidationError(
+                {
+                    'detail': (
+                        'Account created but verification email could not be sent. '
+                        'Use POST /api/v1/auth/resend-verification/ to try again.'
+                    ),
+                }
+            )
 
         return user
 
@@ -122,3 +132,34 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "profile_image": {"required": False, "allow_null": True},
         }
+
+
+class ResendVerificationSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class VerifyEmailSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    otp = serializers.CharField(min_length=6, max_length=6)
+
+
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class VerifyResetOTPSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    otp = serializers.CharField(min_length=6, max_length=6)
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    reset_token = serializers.UUIDField()
+    password = serializers.CharField(write_only=True, min_length=8)
+
+    def validate_password(self, value):
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages))
+        return value
