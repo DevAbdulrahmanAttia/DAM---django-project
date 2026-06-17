@@ -167,20 +167,18 @@ SIMPLE_JWT = {
 }
 
 
-# Email (Gmail SMTP) configuration
+# Email configuration
 # Using python-decouple's `config()` to read sensitive values from `.env`.
-# NOTE: Set the values in your local `.env` file (EMAIL_HOST_USER and EMAIL_HOST_PASSWORD).
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'  # Use SMTP backend for real emails
-EMAIL_HOST = 'smtp.gmail.com'  # Gmail SMTP server
-EMAIL_PORT = 587  # TLS port
-EMAIL_USE_TLS = True  # Use TLS for secure connection
-
-# Credentials are read from environment (.env) to avoid committing secrets.
+# In local development (DEBUG=True), use console backend if SMTP credentials are not configured.
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 
-# Default from address for emails sent by `send_mail()` when from_email is None.
-DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
-
-# Security note: If your Google account uses 2FA, create an App Password
-# and use it as EMAIL_HOST_PASSWORD. Do not enable 'less secure apps' for production.
+if DEBUG and not EMAIL_HOST_USER:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+    DEFAULT_FROM_EMAIL = 'webmaster@localhost'
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_HOST = 'smtp.gmail.com'
+    EMAIL_PORT = 587
+    EMAIL_USE_TLS = True
+    DEFAULT_FROM_EMAIL = EMAIL_HOST_USER or 'webmaster@localhost'
