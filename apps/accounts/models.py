@@ -1,5 +1,8 @@
+import uuid
+
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 
@@ -79,3 +82,54 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return self.full_name
+
+
+class PasswordResetOTP(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='password_reset_otps',
+    )
+    otp = models.CharField(max_length=6)
+    reset_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    is_verified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'is_verified']),
+            models.Index(fields=['reset_token']),
+        ]
+
+    def __str__(self):
+        return f'OTP for {self.user.email}'
+
+    @property
+    def is_expired(self):
+        return timezone.now() >= self.expires_at
+
+
+class EmailVerificationOTP(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='email_verification_otps',
+    )
+    otp = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'otp']),
+        ]
+
+    def __str__(self):
+        return f'Email verification OTP for {self.user.email}'
+
+    @property
+    def is_expired(self):
+        return timezone.now() >= self.expires_at
