@@ -47,3 +47,24 @@ class RegisterSerializer(serializers.ModelSerializer):
             UserProfile.objects.create(user=user)
 
         return user
+
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    # Read profile fields from the related UserProfile via the `profile` relation.
+    full_name = serializers.CharField(source="profile.full_name", read_only=True)
+    address = serializers.CharField(source="profile.address", read_only=True)
+    city = serializers.CharField(source="profile.city", read_only=True)
+    country = serializers.CharField(source="profile.country", read_only=True)
+
+    class Meta:
+        model = User
+        fields = (
+            "username",
+            "email",
+            "phone",
+            "role",
+            "full_name",
+            "address",
+            "city",
+            "country",
+        )
