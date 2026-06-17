@@ -4,6 +4,7 @@ Django settings for config project.
 
 from datetime import timedelta
 from pathlib import Path
+from decouple import config
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -164,3 +165,22 @@ SIMPLE_JWT = {
     'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
 }
+
+
+# Email (Gmail SMTP) configuration
+# Using python-decouple's `config()` to read sensitive values from `.env`.
+# NOTE: Set the values in your local `.env` file (EMAIL_HOST_USER and EMAIL_HOST_PASSWORD).
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'  # Use SMTP backend for real emails
+EMAIL_HOST = 'smtp.gmail.com'  # Gmail SMTP server
+EMAIL_PORT = 587  # TLS port
+EMAIL_USE_TLS = True  # Use TLS for secure connection
+
+# Credentials are read from environment (.env) to avoid committing secrets.
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+
+# Default from address for emails sent by `send_mail()` when from_email is None.
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+
+# Security note: If your Google account uses 2FA, create an App Password
+# and use it as EMAIL_HOST_PASSWORD. Do not enable 'less secure apps' for production.

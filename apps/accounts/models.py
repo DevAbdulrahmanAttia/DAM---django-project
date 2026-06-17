@@ -57,7 +57,7 @@ class UserProfile(models.Model):
         related_name='profile',
         verbose_name=_('user'),
     )
-    full_name = models.CharField(_('full name'), max_length=255, db_index=True)
+    full_name = models.CharField(_('full name'), max_length=255, blank=True, db_index=True)
     address = models.TextField(_('address'), blank=True)
     city = models.CharField(_('city'), max_length=100, blank=True, db_index=True)
     country = models.CharField(_('country'), max_length=100, blank=True, db_index=True)
