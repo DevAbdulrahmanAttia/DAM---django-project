@@ -8,11 +8,14 @@ from .views import (
     OrderStatusUpdateView,
     OrdersHealthCheckView,
 )
+from .seller_views import SellerOrderDetailView, SellerOrderListView
 
 app_name = 'orders'
 
 urlpatterns = [
     path('health/', OrdersHealthCheckView.as_view(), name='health'),
+    path('seller/', SellerOrderListView.as_view(), name='seller-list'),
+    path('seller/<int:pk>/', SellerOrderDetailView.as_view(), name='seller-detail'),
     path('checkout/', CheckoutView.as_view(), name='checkout'),
     path('', OrderListView.as_view(), name='list'),
     path('<int:pk>/', OrderDetailView.as_view(), name='detail'),

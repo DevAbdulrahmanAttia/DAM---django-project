@@ -23,3 +23,14 @@ class IsAdminOrReadOnly(permissions.BasePermission):
             and request.user.is_authenticated
             and getattr(request.user, 'role', None) == 'admin'
         )
+
+
+class IsSeller(permissions.BasePermission):
+    """Allow access only to users with the seller role."""
+
+    def has_permission(self, request, view):
+        return (
+            request.user
+            and request.user.is_authenticated
+            and getattr(request.user, 'role', None) == 'seller'
+        )

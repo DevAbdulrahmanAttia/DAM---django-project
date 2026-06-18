@@ -95,9 +95,25 @@ class ProductListCreateView(generics.ListCreateAPIView):
     Ordering: ?ordering=price  or  ?ordering=-created_at
     """
 
-    queryset = Product.objects.select_related('category', 'seller').filter(
-        seller__is_approved=True,
-    )
+    def get_queryset(self):
+        user = self.request.user
+        mine = self.request.query_params.get('mine')
+        if (
+            self.request.method == 'GET'
+            and user.is_authenticated
+            and mine in ('true', '1')
+            and getattr(user, 'role', None) == 'seller'
+        ):
+            try:
+                seller = user.seller_profile
+            except Exception:
+                return Product.objects.none()
+            return Product.objects.select_related('category', 'seller').filter(seller=seller)
+
+        qs = Product.objects.select_related('category', 'seller').filter(
+            seller__is_approved=True,
+        )
+        return qs
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
 
     # Filtering fields
@@ -130,7 +146,14 @@ class ProductListCreateView(generics.ListCreateAPIView):
                     from rest_framework.exceptions import ValidationError
                     raise ValidationError({'seller': 'No approved seller available. Create a seller first.'})
         else:
-            seller = user.seller_profile
+            if getattr(user, 'role', None) != 'seller':
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('Only sellers can create products.')
+            try:
+                seller = user.seller_profile
+            except Exception:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({'detail': 'Create your store profile before adding products.'})
         serializer.save(seller=seller)
 
 
@@ -166,6 +189,10 @@ class ProductImageListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         product = Product.objects.get(pk=self.kwargs['product_id'])
+        user = self.request.user
+        if getattr(user, 'role', None) != 'admin' and product.seller.user != user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('You can only upload images to your own products.')
         serializer.save(product=product)
 
 

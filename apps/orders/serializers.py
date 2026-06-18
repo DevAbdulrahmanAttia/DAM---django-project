@@ -82,3 +82,42 @@ class CheckoutSerializer(serializers.Serializer):
         required=False,
         default=Decimal('0'),
     )
+
+
+class SellerOrderSerializer(serializers.ModelSerializer):
+    items = serializers.SerializerMethodField()
+    seller_subtotal = serializers.SerializerMethodField()
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    user_username = serializers.SerializerMethodField()
+    user_email = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Order
+        fields = (
+            'id',
+            'user',
+            'user_username',
+            'user_email',
+            'status',
+            'status_display',
+            'seller_subtotal',
+            'items',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = fields
+
+    def get_user_username(self, obj):
+        return obj.user.username if obj.user else None
+
+    def get_user_email(self, obj):
+        return obj.user.email if obj.user else None
+
+    def get_items(self, obj):
+        seller = self.context['seller']
+        items = obj.items.filter(seller=seller)
+        return OrderItemSerializer(items, many=True).data
+
+    def get_seller_subtotal(self, obj):
+        seller = self.context['seller']
+        return sum(item.subtotal for item in obj.items.filter(seller=seller))

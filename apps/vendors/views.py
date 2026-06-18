@@ -4,7 +4,7 @@ from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 
-from config.permissions import IsAdmin
+from config.permissions import IsAdmin, IsSeller
 
 from .models import Seller
 from .serializers import SellerSerializer
@@ -67,3 +67,46 @@ class SellerDetailView(generics.RetrieveUpdateDestroyAPIView):
         if self.request.method == 'DELETE':
             return [IsAdmin()]
         return [IsOwnerOrAdminOrReadOnly()]
+
+
+class SellerMeView(APIView):
+    """GET/PATCH the authenticated seller's store profile; POST to create one."""
+
+    permission_classes = [permissions.IsAuthenticated, IsSeller]
+
+    def _get_seller(self, user):
+        try:
+            return user.seller_profile
+        except Seller.DoesNotExist:
+            return None
+
+    def get(self, request):
+        seller = self._get_seller(request.user)
+        if not seller:
+            return Response({'detail': 'Seller profile not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(SellerSerializer(seller, context={'request': request}).data)
+
+    def post(self, request):
+        if self._get_seller(request.user):
+            return Response(
+                {'detail': 'Seller profile already exists.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer = SellerSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save(user=request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def patch(self, request):
+        seller = self._get_seller(request.user)
+        if not seller:
+            return Response({'detail': 'Seller profile not found.'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = SellerSerializer(
+            seller,
+            data=request.data,
+            partial=True,
+            context={'request': request},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
