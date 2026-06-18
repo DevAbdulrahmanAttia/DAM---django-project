@@ -86,20 +86,45 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
-    """Custom token serializer that blocks login for unverified users."""
+    """Login with email; response includes role for client-side routing."""
+
+    email = serializers.EmailField()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields.pop(self.username_field, None)
+
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        token['role'] = user.role
+        token['username'] = user.username
+        token['email'] = user.email
+        return token
 
     def validate(self, attrs):
-        # Authenticate user first without generating tokens.
+        email = attrs.pop('email')
+        try:
+            user = User.objects.get(email__iexact=email)
+            attrs[self.username_field] = user.get_username()
+        except User.DoesNotExist:
+            attrs[self.username_field] = email
+
         TokenObtainSerializer.validate(self, attrs)
 
-        # If the user hasn't verified email, deny login.
         if not getattr(self.user, 'is_verified', False):
             raise serializers.ValidationError(
                 {'detail': 'Please verify your email before logging in.'}
             )
 
-        # Now call parent to generate JWT tokens.
-        return super().validate(attrs)
+        refresh = self.get_token(self.user)
+        return {
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+            'role': self.user.role,
+            'username': self.user.username,
+            'email': self.user.email,
+        }
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -108,6 +133,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     address = serializers.CharField(source="profile.address", read_only=True)
     city = serializers.CharField(source="profile.city", read_only=True)
     country = serializers.CharField(source="profile.country", read_only=True)
+    profile_image = serializers.ImageField(source="profile.profile_image", read_only=True)
 
     class Meta:
         model = User
@@ -120,6 +146,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "address",
             "city",
             "country",
+            "profile_image",
         )
 
 
@@ -163,3 +190,43 @@ class ResetPasswordSerializer(serializers.Serializer):
         except DjangoValidationError as exc:
             raise serializers.ValidationError(list(exc.messages))
         return value
+
+
+class AdminUserListSerializer(serializers.ModelSerializer):
+    full_name = serializers.CharField(source='profile.full_name', read_only=True)
+    order_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = (
+            'id',
+            'username',
+            'email',
+            'phone',
+            'role',
+            'is_active',
+            'is_verified',
+            'full_name',
+            'date_joined',
+            'order_count',
+        )
+        read_only_fields = fields
+
+    def get_order_count(self, obj):
+        return obj.orders.count()
+
+
+class AdminUserUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('is_active', 'is_verified')
+
+    def validate(self, attrs):
+        user = self.instance
+        request = self.context.get('request')
+        if user and request and user == request.user:
+            if 'is_active' in attrs and not attrs['is_active']:
+                raise serializers.ValidationError(
+                    {'is_active': 'You cannot deactivate your own account.'}
+                )
+        return attrs

@@ -1,14 +1,23 @@
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.db.models import Count, Sum
 from django.utils import timezone
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework_simplejwt.views import TokenBlacklistView, TokenObtainPairView
+
+from apps.orders.models import Order, OrderStatus
+from apps.products.models import Product
+from config.permissions import IsAdmin
 
 from .models import EmailVerificationOTP, PasswordResetOTP, UserProfile
 from .serializers import (
+    AdminUserListSerializer,
+    AdminUserUpdateSerializer,
     CustomTokenObtainPairSerializer,
     ForgotPasswordSerializer,
     RegisterSerializer,
@@ -255,3 +264,69 @@ class ProfileView(generics.RetrieveUpdateAPIView):
             context=self.get_serializer_context(),
         )
         return Response(read_serializer.data)
+
+
+class AdminUserListView(generics.ListAPIView):
+    serializer_class = AdminUserListSerializer
+    permission_classes = [IsAdmin]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['role', 'is_active', 'is_verified']
+    search_fields = ['username', 'email', 'phone', 'profile__full_name']
+    ordering_fields = ['date_joined', 'username', 'email']
+    ordering = ['-date_joined']
+
+    def get_queryset(self):
+        return User.objects.select_related('profile').annotate(
+            _order_count=Count('orders'),
+        )
+
+
+class AdminUserDetailView(generics.RetrieveUpdateAPIView):
+    serializer_class = AdminUserListSerializer
+    permission_classes = [IsAdmin]
+    queryset = User.objects.select_related('profile')
+
+    def get_serializer_class(self):
+        if self.request.method in ('PUT', 'PATCH'):
+            return AdminUserUpdateSerializer
+        return AdminUserListSerializer
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = AdminUserUpdateSerializer(
+            instance,
+            data=request.data,
+            partial=partial,
+            context=self.get_serializer_context(),
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        read_serializer = AdminUserListSerializer(instance, context=self.get_serializer_context())
+        return Response(read_serializer.data)
+
+
+class AdminDashboardStatsView(APIView):
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        thirty_days_ago = timezone.now() - timedelta(days=30)
+        orders_qs = Order.objects.exclude(status=OrderStatus.CANCELLED)
+        recent_orders = orders_qs.filter(created_at__gte=thirty_days_ago)
+
+        revenue = orders_qs.aggregate(total=Sum('total'))['total'] or 0
+        recent_revenue = recent_orders.aggregate(total=Sum('total'))['total'] or 0
+
+        return Response(
+            {
+                'total_revenue': revenue,
+                'recent_revenue': recent_revenue,
+                'total_orders': orders_qs.count(),
+                'recent_orders': recent_orders.count(),
+                'total_products': Product.objects.filter(is_active=True).count(),
+                'total_customers': User.objects.filter(role='customer', is_active=True).count(),
+                'total_sellers': User.objects.filter(role='seller', is_active=True).count(),
+                'pending_orders': Order.objects.filter(status=OrderStatus.PENDING).count(),
+            },
+            status=status.HTTP_200_OK,
+        )
